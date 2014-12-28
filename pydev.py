@@ -33,13 +33,20 @@ class ReplViewAndExecute(sublime_plugin.TextCommand):
     def run(self, edit):
         # get largest selected point and eof
         v = self.view
-        max_point = v.sel()[0].end() # largest selected point
+        lines = v.lines(v.sel()[0]) # get lines without newline breaks
+        max_point = lines[len(lines) - 1].end() # largest selected non newline point
         max_point_line_num = v.rowcol(max_point)[0] # line num of max point
-        max_point_region = v.line(v.text_point(max_point_line_num, 0)) # region of max point
         eof_line = v.rowcol(v.size())[0] # get the eof line
+        block = True if len(v.lines(v.sel()[0])) > 1 else False # find how many lines were selected
 
         # order and remove blocked comments and empty space (keep only code blocks)
         self.keep_code_blocks()
+
+        if v.line(max_point).empty() and block:
+            print('multiple blocks')
+        else:
+            print('one line')
+
 
         v.window().run_command('repl_transfer_current', {
             "scope": "lines",
@@ -48,41 +55,53 @@ class ReplViewAndExecute(sublime_plugin.TextCommand):
         v.window().run_command('focus_group', {"group": 1}) # focus REPL
         v.window().run_command('repl_enter')
         v.sel().clear()
+        v.sel().add(max_point)
 
-        # collapse the cursor to the last selection point
-        v.window().run_command('focus_group', {"group": 0}) # focus REPL
+        # check block if ended on non empty line
+        if not v.line(max_point).empty() and block:
+            print('single block')
+            v.window().run_command('repl_enter')
+            max_point_line_num = self.move_down(max_point_line_num)
 
-        # move down to next non empty line
-        if not max_point_region.empty():
-            v.sel().clear()
-            max_point_line_num = max_point_line_num + 1
-            max_point_region = v.line(v.text_point(max_point_line_num, 0)) # region of max point
-
-            # if next line IS empty, then clear through white space
-            if max_point_region.empty():
-                #clear the console
-                v.window().run_command('focus_group', {"group": 1}) # focus REPL
+            # clear console if empty line
+            if v.line(v.sel()[0]).empty():
+                print('block finished, clear console')
                 v.window().run_command('repl_enter')
 
-                while max_point_region.empty():
-                    v.sel().clear()
-                    max_point_line_num = max_point_line_num + 1
-                    max_point_region = v.line(v.text_point(max_point_line_num, 0))
-                    v.sel().add(max_point_region.begin())
-                    if max_point_line_num >= eof_line:
-                        break
-
-                v.window().run_command('focus_group', {"group": 0}) # focus REPL
+                # clear whitespace
+                self.clear_whitespace(max_point_line_num, eof_line)
             else:
-                v.sel().add(max_point_region.begin())
+                print('still in block')
+        elif not v.line(max_point).empty() and not block:
+            max_point_line_num = self.move_down(max_point_line_num)
         else:
-            while max_point_region.empty():
-                v.sel().clear()
-                max_point_line_num = max_point_line_num + 1
-                max_point_region = v.line(v.text_point(max_point_line_num, 0))
-                v.sel().add(max_point_region.begin())
-                if max_point_line_num >= eof_line:
-                    break
+            print('empty line')
+            # clear console if empty line
+            if v.line(v.sel()[0]).empty():
+                self.clear_whitespace(max_point_line_num, eof_line)
+
+        # focus console
+        v.window().run_command('focus_group', {"group": 0})
+
+    def move_down(self, line_num):
+        v = self.view
+        v.sel().clear()
+        line_num = line_num + 1
+        region = v.line(v.text_point(line_num, 0))
+        v.sel().add(region.begin())
+        return line_num
+
+    def clear_whitespace(self, line_num, eof_line):
+        v = self.view
+        # clear whitespace
+        if v.line(v.sel()[0]).empty():
+            print('clearing whitespace')
+
+        while v.line(v.sel()[0]).empty():
+            line_num = self.move_down(line_num)
+            if line_num >= eof_line:
+                break
+        print('------\n')
 
     def keep_code_blocks(self):
         selection = self.view.line(self.view.sel()[0]) # get the region, ordered
@@ -113,6 +132,7 @@ class ReplViewAndExecute(sublime_plugin.TextCommand):
 
             return comment_blocks
 
+        # get all lines and comment blocks
         all_selected_lines = self.view.lines(self.view.sel()[0])
         comment_blocks = find_comment_blocks(three_quotes)
 
@@ -125,10 +145,6 @@ class ReplViewAndExecute(sublime_plugin.TextCommand):
             in zip(all_selected_lines, comment_block_index,
             comment_line_index) if b == c]
 
-        print('comment blocks:\n%s' % comment_block_index)
-        print('comment lines:\n%s' % comment_line_index)
-        print('keep the following lines:\n%s' % comments_removed)
-
         # find empty lines and whitespace blocks
         empty_index = [x.empty() for x in comments_removed] # find empty lines
         whitespace_index = []
@@ -138,13 +154,15 @@ class ReplViewAndExecute(sublime_plugin.TextCommand):
             else:
                 whitespace_index.append(x)
 
-        print('empty lines:\n%s' % empty_index)
-        print('whitespace lines:\n%s' % whitespace_index)
-
         # remove whitespace
         keep_lines = [a for a,b
             in zip(comments_removed, whitespace_index) if not b]
 
+        # print('comment blocks:\n%s' % comment_block_index)
+        # print('comment lines:\n%s' % comment_line_index)
+        # print('keep the following lines:\n%s' % comments_removed)
+        # print('empty lines:\n%s' % empty_index)
+        # print('whitespace lines:\n%s' % whitespace_index)
 
         self.view.sel().clear() # clear current unordered selection
         self.view.sel().add_all(keep_lines)

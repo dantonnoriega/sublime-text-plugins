@@ -21,23 +21,23 @@ class ExpandSelectionToSectionCommand(sublime_plugin.TextCommand):
             return v.substr(v.line(v.text_point(row, col)))
 
         def find_top(line, pattern):
-            print('%d' % line)
+            # print('%d' % line)
             if pattern.match(get_text(line, 0)): # match text
                 top = v.line(v.text_point(line + 1, 0))
-                print('section values: (%d, %d)' % (top.a, top.b))
+                # print('section values: (%d, %d)' % (top.a, top.b))
                 return top
             else:
                 return find_top(line - 1, pattern)
 
         def find_bottom(line, eof_line, pattern):
-            print('%d' % line)
+            # print('%d' % line)
             if pattern.match(get_text(line, 0)): # match text
                 bottom = v.line(v.text_point(line - 1, 0))
-                print('section values: (%d, %d)' % (bottom.a, bottom.b))
+                # print('section values: (%d, %d)' % (bottom.a, bottom.b))
                 return bottom
             elif line == eof_line:
                 bottom = v.line(v.text_point(eof_line, 0))
-                print('eof values: (%d, %d)' % (bottom.a, bottom.b))
+                # print('eof values: (%d, %d)' % (bottom.a, bottom.b))
                 return bottom
             else:
                 return find_bottom(line + 1, eof_line, pattern)
