@@ -1,3 +1,29 @@
+"""
+DESCRIPTION:
+Using SublimeREPL, this plugin allows one to easily transfer AND
+evaluate blocks of python code. The code automatically detect python
+blocks, executes them, and skips white space, comment blocks and
+comment lines.
+
+REQUIRES:
+working with only 2 groups in the window. the main group (group 0)
+needs to be your scripts and the second group (group 1) needs to be
+a repl window.
+
+keybind the following commands:
+    py_col
+        - used to open up a python repl as a group ("group" : 1) in
+        the same window, column-wise. useful for full-screen work with
+        scripts in the main group and repl in the other.
+    py_row
+        - same as py_col, but as a row. best for working while also using
+        part of the screen for a browser.
+    repl_trans_and_eval
+        - workhorse script. it will automatically transfer lines or blocks
+        of code to repl, execute them, move the cursor down, and refocus
+        back on the script group.
+"""
+
 import sublime, sublime_plugin
 
 # create column group
@@ -28,7 +54,8 @@ class PyRowCommand(sublime_plugin.WindowCommand):
         })
         self.window.run_command('move_to_group', {"group": 1})
 
-class ReplViewAndExecute(sublime_plugin.TextCommand):
+# transfer and evaluate
+class ReplTransAndEvalCommand(sublime_plugin.TextCommand):
 
     def run(self, edit):
         # get largest selected point and eof
@@ -37,53 +64,57 @@ class ReplViewAndExecute(sublime_plugin.TextCommand):
         max_point = lines[len(lines) - 1].end() # largest selected non newline point
         max_point_line_num = v.rowcol(max_point)[0] # line num of max point
         eof_line = v.rowcol(v.size())[0] # get the eof line
-        block = True if len(v.lines(v.sel()[0])) > 1 else False # find how many lines were selected
+        block = True if len(v.lines(v.sel()[0])) > 1 else False # tag blocks of code
 
-        # order and remove blocked comments and empty space (keep only code blocks)
+        ## order and remove blocked comments and empty space
+        ##  from selection (keep only code blocks)
         self.keep_code_blocks()
 
+        ## NOTE: anything printed is sent to the sublime console (ctrl+`)
+        ##  which is useful for understanding whats happening.
         if v.line(max_point).empty() and block:
             print('multiple blocks')
-        else:
-            print('one line')
 
-
+        # send lines to REPL
         v.window().run_command('repl_transfer_current', {
             "scope": "lines",
             "action": "view_write"
-        }) # send lines to REPL
+        })
         v.window().run_command('focus_group', {"group": 1}) # focus REPL
-        v.window().run_command('repl_enter')
+        v.window().run_command('repl_enter') # evaluate code
+
+        # collapse cursors to last point of original selection
         v.sel().clear()
         v.sel().add(max_point)
 
-        # check block if ended on non empty line
+        ## check if single block or line of code. eval accordingly
         if not v.line(max_point).empty() and block:
             print('single block')
             v.window().run_command('repl_enter')
             max_point_line_num = self.move_down(max_point_line_num)
 
-            # clear console if empty line
+            # run through whitespace if finished block
             if v.line(v.sel()[0]).empty():
-                print('block finished, clear console')
-                v.window().run_command('repl_enter')
-
-                # clear whitespace
+                print('block finished')
                 self.clear_whitespace(max_point_line_num, eof_line)
             else:
                 print('still in block')
         elif not v.line(max_point).empty() and not block:
+            print('one line')
             max_point_line_num = self.move_down(max_point_line_num)
         else:
-            print('empty line')
-            # clear console if empty line
+            if not block:
+                print('empty line')
+
+            # run through whitespace if empty line
             if v.line(v.sel()[0]).empty():
                 self.clear_whitespace(max_point_line_num, eof_line)
 
-        # focus console
+        # focus back to scripts
         v.window().run_command('focus_group', {"group": 0})
 
     def move_down(self, line_num):
+        """move cursor down one line and to far left"""
         v = self.view
         v.sel().clear()
         line_num = line_num + 1
@@ -92,6 +123,7 @@ class ReplViewAndExecute(sublime_plugin.TextCommand):
         return line_num
 
     def clear_whitespace(self, line_num, eof_line):
+        """move cursor through whitespace without evaluating"""
         v = self.view
         # clear whitespace
         if v.line(v.sel()[0]).empty():
@@ -104,6 +136,8 @@ class ReplViewAndExecute(sublime_plugin.TextCommand):
         print('------\n')
 
     def keep_code_blocks(self):
+        """ find and skip any comment blocks or comment lines, isolating
+        blocks of code """
         selection = self.view.line(self.view.sel()[0]) # get the region, ordered
 
         # find points of three quotes contained in the selection
@@ -141,11 +175,11 @@ class ReplViewAndExecute(sublime_plugin.TextCommand):
         comment_line_index = [x in comment_lines for x in all_selected_lines]
 
         # removed comments
-        comments_removed = [a for a,b,c
-            in zip(all_selected_lines, comment_block_index,
-            comment_line_index) if b == c]
+        index_val_tups = zip(all_selected_lines, comment_block_index,
+            comment_line_index)
+        comments_removed = [a for a, b, c in index_val_tups if b == c]
 
-        # find empty lines and whitespace blocks
+        # find empty lines and whitespace blocks. keep one space after blocks.
         empty_index = [x.empty() for x in comments_removed] # find empty lines
         whitespace_index = []
         for i, x in enumerate(empty_index):
@@ -154,30 +188,11 @@ class ReplViewAndExecute(sublime_plugin.TextCommand):
             else:
                 whitespace_index.append(x)
 
-        # remove whitespace
-        keep_lines = [a for a,b
-            in zip(comments_removed, whitespace_index) if not b]
-
-        # print('comment blocks:\n%s' % comment_block_index)
-        # print('comment lines:\n%s' % comment_line_index)
-        # print('keep the following lines:\n%s' % comments_removed)
-        # print('empty lines:\n%s' % empty_index)
-        # print('whitespace lines:\n%s' % whitespace_index)
+        # remove whitespace (any empty lines not immediately after block)
+        keep_lines = [a for a,b in
+            zip(comments_removed, whitespace_index) if not b]
 
         self.view.sel().clear() # clear current unordered selection
-        self.view.sel().add_all(keep_lines)
+        self.view.sel().add_all(keep_lines) # add all isolated blocks
 
         return self.view.sel()
-
-
-
-
-
-
-
-
-
-
-
-
-
