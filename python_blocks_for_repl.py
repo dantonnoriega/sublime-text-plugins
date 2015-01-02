@@ -2,7 +2,7 @@
 DESCRIPTION:
 Using SublimeREPL, this plugin allows one to easily transfer AND
 evaluate blocks of python code. The code automatically detect python
-blocks, executes them, and skips white space, comment blocks and
+blocks, executes them, and skips space, comment blocks and
 comment lines.
 
 REQUIRES:
@@ -60,100 +60,188 @@ class ReplTransAndEvalCommand(sublime_plugin.TextCommand):
     def run(self, edit):
         # get largest selected point and eof
         v = self.view
-        lines = v.lines(v.sel()[0]) # get lines without newline breaks
+
+        # check if one line or a block
+        one_line = True if len(v.lines(v.sel()[0])) == 1 else False # tag if one line
+
+        # get all selected lines and find maximal point and line
+        all_selected = self.keep_code_blocks(v.sel()[0])
+        lines = v.lines(v.sel()[0]) # get selected line(s) without newline breaks
         max_point = lines[len(lines) - 1].end() # largest selected non newline point
-        max_point_line_num = v.rowcol(max_point)[0] # line num of max point
-        eof_line = v.rowcol(v.size())[0] # get the eof line
-        block = True if len(v.lines(v.sel()[0])) > 1 else False # tag blocks of code
+        eof_line = v.rowcol(v.size())[0] # line num of max point
 
-        ## order and remove blocked comments and empty space
-        ##  from selection (keep only code blocks)
-        self.keep_code_blocks()
+        # get line nums for all code blocks and empty indeces
+        all_code = v.line(sublime.Region(0, v.size()))
+        cleaned_lines = self.keep_code_blocks(all_code) # get all lines w/o comments
+        line_ref = [v.rowcol(x.begin())[0] for x in cleaned_lines]
+        empty_index, block_end_index, block_index = self.get_indeces(cleaned_lines)
+        line_empty_ref = dict((k, v) for k, v in zip(line_ref, empty_index) if v)
+        line_block_end_ref = dict((k, v) for k, v in zip(line_ref, block_end_index) if v)
+        line_block_ref = dict((k, v) for k, v in zip(line_ref, block_index) if v)
 
-        ## NOTE: anything printed is sent to the sublime console (ctrl+`)
-        ##  which is useful for understanding whats happening.
-        if v.line(max_point).empty() and block:
-            print('multiple blocks')
+        ## to see what's happening
+        # print('line ref      ', line_ref)
+        # print('empty ref     ', line_empty_ref)
+        # print('block ref     ', line_block_ref)
+        # print('block end ref ', line_block_end_ref)
 
-        # send lines to REPL
-        v.window().run_command('repl_transfer_current', {
-            "scope": "lines",
-            "action": "view_write"
-        })
-        v.window().run_command('focus_group', {"group": 1}) # focus REPL
-        v.window().run_command('repl_enter') # evaluate code
-
-        # collapse cursors to last point of original selection
+        # trims selection to code blocks
         v.sel().clear()
-        v.sel().add(max_point)
+        v.sel().add_all(all_selected)
 
-        ## check if single block or line of code. eval accordingly
-        if not v.line(max_point).empty() and block:
-            print('single block')
-            v.window().run_command('repl_enter')
-            max_point_line_num = self.move_down(max_point_line_num)
+        # capture current or last line from max_point
+        current_line_num = v.rowcol(max_point)[0]
+        current_line = v.line(max_point)
 
-            # run through whitespace if finished block
-            if v.line(v.sel()[0]).empty():
-                print('block finished')
-                self.clear_whitespace(max_point_line_num, eof_line)
+        ## evaluate by line or blocks
+        if not one_line: # if not one line
+            # send lines to REPL
+            v.window().run_command('repl_transfer_current', {
+                "scope": "lines",
+                "action": "view_write"
+            })
+            v.window().run_command('focus_group', {"group": 1}) # focus REPL
+            v.window().run_command('repl_enter') # evaluate code
+
+            # update current line
+            current_line_num = current_line_num + 1
+
+            # clear console
+            if current_line_num in line_block_end_ref:
+                v.window().run_command('repl_enter') # evaluate code
+            elif current_line_num not in line_ref:
+                v.window().run_command('repl_enter') # evaluate code
             else:
-                print('still in block')
-        elif not v.line(max_point).empty() and not block:
-            print('one line')
-            max_point_line_num = self.move_down(max_point_line_num)
+                pass
+
+            # move cursor
+            v.window().run_command('focus_group', {"group": 0}) # focus REPL
+            self.move_cursor(current_line_num)
+
         else:
-            if not block:
-                print('empty line')
+            if current_line_num in line_ref:
 
-            # run through whitespace if empty line
-            if v.line(v.sel()[0]).empty():
-                self.clear_whitespace(max_point_line_num, eof_line)
+                print('run line %d: %s' % (current_line_num, v.substr(current_line)))
+                v.window().run_command('repl_transfer_current', {
+                    "scope": "lines",
+                    "action": "view_write"
+                }) # send lines to REPL
+                v.window().run_command('focus_group', {"group": 1}) # focus REPL
+                v.window().run_command('repl_enter')
 
-        # focus back to scripts
-        v.window().run_command('focus_group', {"group": 0})
+                # update current line
+                current_line_num = current_line_num + 1
 
-    def move_down(self, line_num):
-        """move cursor down one line and to far left"""
+                # move cursor down
+                v.window().run_command('focus_group', {"group": 0}) # focus REPL
+                self.move_cursor(current_line_num)
+            else:
+                # if line is empty or comment, then move cursor down
+                # move cursor
+                current_line_num = self.skip_lines(current_line_num, eof_line, line_ref)
+                v.window().run_command('focus_group', {"group": 0}) # focus REPL
+                self.move_cursor(current_line_num)
+
+    def move_cursor(self, line_num):
+        """move cursor to the left of line"""
         v = self.view
         v.sel().clear()
-        line_num = line_num + 1
         region = v.line(v.text_point(line_num, 0))
         v.sel().add(region.begin())
+        return v.sel()
+
+    def skip_lines(self, line_num, eof_line, line_ref):
+        """move cursor through empty lines or comments without evaluating"""
+
+        if line_num not in line_ref:
+            print('skipping lines')
+
+            while line_num not in line_ref:
+                if line_num > eof_line:
+                    break
+                line_num = line_num + 1
+
+            print('------\n')
+        else:
+            pass
+
         return line_num
 
-    def clear_whitespace(self, line_num, eof_line):
-        """move cursor through whitespace without evaluating"""
+    def get_indeces(self, ordered_lines):
+        """get indeces for blocks and for empty lines"""
         v = self.view
-        # clear whitespace
-        if v.line(v.sel()[0]).empty():
-            print('clearing whitespace')
 
-        while v.line(v.sel()[0]).empty():
-            line_num = self.move_down(line_num)
-            if line_num >= eof_line:
-                break
-        print('------\n')
+        #find empty lines and tab counts.
+        # keep one space after blocks any code blocks.
+        tab_size = 4
+        empty_index = [x.empty() for x in ordered_lines] # find empty lines
+        nonempty_index = [not x for x in empty_index]
+        tab_count = [v.substr(x).count(' '*tab_size) for x in ordered_lines]
+        text_tab = list(zip(nonempty_index, tab_count))
 
-    def keep_code_blocks(self):
-        """ find and skip any comment blocks or comment lines, isolating
-        blocks of code """
-        selection = self.view.line(self.view.sel()[0]) # get the region, ordered
+        # create a block index using tabs and nonempty_index
+        carry_val = 0
+        tab_count_filled = []
+        for a, b in text_tab[::-1]: # key is to reverse vector THEN carry forward
+            if a: # if we see a tab, carry tab count forward
+                carry_val = b
+                tab_count_filled.append(carry_val)
+            else: # else just assign curry value
+                tab_count_filled.append(carry_val)
 
-        # find points of three quotes contained in the selection
-        three_quotes_pattern = self.view.find_all('(\"\"\")')
-        three_quotes = [q for q in three_quotes_pattern if selection.contains(q)]
+        tab_count_filled = tab_count_filled[::-1] # reverse again to get correct order
+        block_index = [x > 0 or y for x, y in zip(tab_count_filled, nonempty_index)]
 
-        # find comment-only lines
-        comment_pattern = self.view.find_all('^#.*')
-        comment_lines = [q for q in comment_pattern if selection.contains(q)]
+        # find when a block ends
+        block_end_index = []
+        for i, x in enumerate(tab_count_filled):
+            block_end_index.append(True if (x == 0 and x < tab_count_filled[i-1]) else False)
 
-        # create blocks by finding three quote pairs
-        def find_comment_blocks(list):
+        ## see what's happening
+        # print('nonempty_index  ', [int(x) for x in nonempty_index])
+        # print('tab_count       ', tab_count)
+        # print('tab_count_filled', tab_count_filled)
+        # print('block_end_index ', [int(x) for x in block_end_index])
+        # print('block_index     ', [int(x) for x in block_index])
+        # print('empty_index     ', [int(x) for x in empty_index])
+
+        return (empty_index, block_end_index, block_index)
+
+    def keep_code_blocks(self, selection):
+        """remove unwanted lines and keep only code blocks"""
+        v = self.view
+
+        comments_removed = self.remove_comments(selection)
+        keep_code_blocks = self.remove_empty_lines(comments_removed)
+
+        return keep_code_blocks
+
+    def remove_empty_lines(self, selection):
+        """find and remove empty lines but keep end of comment blocks"""
+
+        # find empty lines
+        empty_index, block_end_index, block_index = self.get_indeces(selection)
+
+        # # removed empty lines
+        index_val_tups = zip(selection, empty_index, block_end_index)
+        empty_lines_removed = [a for a, b, c in index_val_tups if not b or c]
+
+        return empty_lines_removed
+
+    def remove_comments(self, selection):
+        """ find and skip any comment blocks or comment lines"""
+        v = self.view
+
+        def find_matches(pattern):
+            find_all_matches = v.find_all(pattern)
+            find_contained_matches = [q for q in find_all_matches if selection.contains(q)]
+            return find_contained_matches
+
+        def find_comment_blocks(regions):
             start_points = []
             end_points = []
 
-            for i, region in enumerate(three_quotes):
+            for i, region in enumerate(regions):
                 if (i+1)%2 == 1:
                     start_points.append(region.a)
                 else:
@@ -161,38 +249,29 @@ class ReplTransAndEvalCommand(sublime_plugin.TextCommand):
 
             comment_blocks = []
             for val in zip(start_points, end_points):
-                block = self.view.lines(sublime.Region(val[0], val[1]))
+                block = v.lines(sublime.Region(val[0], val[1]))
                 comment_blocks.extend(block)
 
             return comment_blocks
 
-        # get all lines and comment blocks
-        all_selected_lines = self.view.lines(self.view.sel()[0])
+        # find points of three quotes contained in the selection
+        three_quotes = find_matches('(\"\"\")')
+
+        # find full comment-only lines
+        comment_lines = find_matches('^([ ]*#.*)')
+
+        # create blocks by finding three quote pairs
+        ordered_lines = v.lines(selection) # ensure selection is ordered
         comment_blocks = find_comment_blocks(three_quotes)
 
-        # create comment indeces
-        comment_block_index = [x in comment_blocks for x in all_selected_lines]
-        comment_line_index = [x in comment_lines for x in all_selected_lines]
+        # create comment indeces for each seperate line
+        comment_block_index = [x in comment_blocks for x in ordered_lines]
+        comment_line_index = [x in comment_lines for x in ordered_lines]
 
-        # removed comments
-        index_val_tups = zip(all_selected_lines, comment_block_index,
+        # removed unwanted lines
+        index_val_tups = zip(ordered_lines, comment_block_index,
             comment_line_index)
         comments_removed = [a for a, b, c in index_val_tups if b == c]
 
-        # find empty lines and whitespace blocks. keep one space after blocks.
-        empty_index = [x.empty() for x in comments_removed] # find empty lines
-        whitespace_index = []
-        for i, x in enumerate(empty_index):
-            if x != empty_index[i-1]:
-                whitespace_index.append(False)
-            else:
-                whitespace_index.append(x)
+        return comments_removed
 
-        # remove whitespace (any empty lines not immediately after block)
-        keep_lines = [a for a,b in
-            zip(comments_removed, whitespace_index) if not b]
-
-        self.view.sel().clear() # clear current unordered selection
-        self.view.sel().add_all(keep_lines) # add all isolated blocks
-
-        return self.view.sel()
