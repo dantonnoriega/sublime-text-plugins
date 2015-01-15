@@ -2,8 +2,9 @@
 DESCRIPTION:
 Using SublimeREPL, this plugin allows one to easily transfer AND
 evaluate blocks of python code. The code automatically detect python
-blocks, executes them, and skips space, comment blocks and
-comment lines.
+blocks and executes only code lines, omitting empty space and comments.
+One can skips space, comment blocks and comment lines by executing on
+empty lines, comments etc.
 
 REQUIRES:
 working with only 2 groups in the window. the main group (group 0)
@@ -20,8 +21,9 @@ keybind the following commands:
         part of the screen for a browser.
     repl_trans_and_eval
         - workhorse script. it will automatically transfer lines or blocks
-        of code to repl, execute them, move the cursor down, and refocus
-        back on the script group.
+        of code to repl and execute them. Move the cursor through empty lines
+        or comments by executing on an empty line (end of block doesn't count)
+        or comment.
 """
 
 import sublime, sublime_plugin
