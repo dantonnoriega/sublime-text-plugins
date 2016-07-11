@@ -142,7 +142,7 @@ class SendMagrittrPipe(sublime_plugin.TextCommand):
             # # Add selection
             s.add(chunk_range)
 
-            print("send chunk:\n%s" % self.view.substr(chunk_range))
+            # print("send chunk:\n%s" % self.view.substr(chunk_range))
 
             # Run command from Enhanced-R
             v.run_command('send_text_plus')
@@ -151,6 +151,6 @@ class SendMagrittrPipe(sublime_plugin.TextCommand):
             s.subtract(chunk_range)
 
             #move cursor
-            print("RETURN BOTTOM LINE + 1: %d" % (bottom_pipe_line_num + 1))
+            # print("RETURN BOTTOM LINE + 1: %d" % (bottom_pipe_line_num + 1))
             self.move_cursor(bottom_pipe_line_num + 1)
 
