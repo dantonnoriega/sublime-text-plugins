@@ -119,12 +119,10 @@ class SendMagrittrPipe(sublime_plugin.TextCommand):
                     return find_end_pipe(line, eof_line_num, pattern)
                 else:
                     bottom = v.line(v.text_point(line, 0))
-                    print('section values: (%d, %d)' % (bottom.a, bottom.b))
                     return bottom
 
             elif line == eof_line_num:
                 bottom = v.line(v.text_point(eof_line_num, 0))
-                # print('eof values: (%d, %d)' % (bottom.a, bottom.b))
                 return bottom
             else:
                 return find_end_pipe(line, eof_line_num, pattern)
@@ -149,11 +147,8 @@ class SendMagrittrPipe(sublime_plugin.TextCommand):
         print('TOP LINE: %s' % current_line_num)
         eof = v.size()
         eof_line_num = v.rowcol(eof)[0]
-        # print('EOF LINE: %d' % eof)
         top_pipe_line = find_pipe(current_line_num, re_pipe)
         bottom_pipe_line = find_end_pipe(current_line_num, eof_line_num, re_pipe)
-        print("TOP LINE: %s" % v.substr(top_pipe_line))
-        print("BOTTOM LINE: %s" % v.substr(bottom_pipe_line))
 
         # check if top_pipe_line is empty. If so, run send_text_plus on line.
         if top_pipe_line is None:
