@@ -1,0 +1,7 @@
+[
+    // expand selection
+    { "keys": ["super+j"], "command": "expand_selection", "args": {"to": "indentation"} },
+    { "keys": ["super+alt+j"], "command": "expand_selection_to_eof"},
+    { "keys": ["super+alt+l"], "command": "expand_selection_to_paragraph"},
+    { "keys": ["super+ctrl+l"], "command": "expand_selection_to_section"}
+]

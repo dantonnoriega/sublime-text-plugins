@@ -1,0 +1,20 @@
+[    
+    // search forward and backwards for pipes
+    {
+        "keys": ["super+enter"], "command": "send_magrittr_pipe",
+        "context":
+        [
+            { "key": "following_text", "operator": "regex_contains", "operand": "%<>%|<>%|%>%|>%|%", "match_all": false },
+            { "key": "selector", "operator": "equal", "operand": "source.r" }
+        ]
+    },
+
+    {
+        "keys": ["super+enter"], "command": "send_magrittr_pipe",
+        "context":
+        [
+            { "key": "preceding_text", "operator": "regex_contains", "operand": "^.*%<>%|^.*%<>|^.*%>%|^.*%<|^.*%", "match_all": false },
+            { "key": "selector", "operator": "equal", "operand": "source.r" }
+        ]
+    }
+]
