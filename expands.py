@@ -96,10 +96,9 @@ class SendMagrittrPipe(sublime_plugin.TextCommand):
             line = line + 1
             # print('CURRENT BOTTOM LINE: %d' % line)
             text = get_text(line, 0)
-
             #check
             print(text)
-            if pattern.search(text): # search text
+            if not pattern.search(text): # search text
                 bottom = v.line(v.text_point(line, 0))
                 # print('section values: (%d, %d)' % (bottom.a, bottom.b))
                 return bottom
@@ -112,8 +111,7 @@ class SendMagrittrPipe(sublime_plugin.TextCommand):
 
         # find pattern
         import re
-        re_pipe = re.compile("%<?>%[ ]*$")
-        re_end_pipe = re.compile("[^%][ ]*$")
+        re_pipe = re.compile("(%<?>%)")
 
         # search for closest section top and bottom
         initial_selection = s[0]
@@ -122,9 +120,9 @@ class SendMagrittrPipe(sublime_plugin.TextCommand):
         # print('CURRENT LINE: %d' % current_line_num)
         eof = v.size()
         eof_line_num = v.rowcol(eof)[0]
-        # print('EOF LINE: %d' % eof_line_num)
+        # print('EOF LINE: %d' % eof)
         top_pipe_line = find_pipe(current_line_num, re_pipe)
-        bottom_pipe_line = find_end_pipe(current_line_num, eof_line_num, re_end_pipe)
+        bottom_pipe_line = find_end_pipe(current_line_num, eof_line_num, re_pipe)
 
         # check if top_pipe_line is empty. If so, run send_text_plus on line.
         if top_pipe_line is None:
@@ -142,7 +140,7 @@ class SendMagrittrPipe(sublime_plugin.TextCommand):
             # # Add selection
             s.add(chunk_range)
 
-            # print("send chunk:\n%s" % self.view.substr(chunk_range))
+            print("SEND CHUNK:\n%s" % self.view.substr(chunk_range))
 
             # Run command from Enhanced-R
             v.run_command('send_text_plus')
@@ -153,4 +151,3 @@ class SendMagrittrPipe(sublime_plugin.TextCommand):
             #move cursor
             # print("RETURN BOTTOM LINE + 1: %d" % (bottom_pipe_line_num + 1))
             self.move_cursor(bottom_pipe_line_num + 1)
-
