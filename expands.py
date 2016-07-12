@@ -81,7 +81,6 @@ class SendMagrittrPipe(sublime_plugin.TextCommand):
             text = get_text(line, 0)
             #check
             print(text)
-            print(pattern.search(text))
             if pattern.search(text) is None:
                 return None
 
@@ -115,6 +114,15 @@ class SendMagrittrPipe(sublime_plugin.TextCommand):
 
         # search for closest section top and bottom
         initial_selection = s[0]
+
+        # if something is selected, send that, not the line
+        if s[0].a != s[0].b:
+            chunk_range = sublime.Region(s[0].a, s[0].b)
+            print("SEND CHUNK:\n%s" % self.view.substr(chunk_range))
+            # Run command from Enhanced-R
+            v.run_command('send_text_plus')
+            return
+
         first_point = v.line(s[0]).a
         current_line_num = v.rowcol(first_point)[0] # get line number
         # print('CURRENT LINE: %d' % current_line_num)
