@@ -68,26 +68,45 @@ class SendMagrittrPipe(sublime_plugin.TextCommand):
             else:
                 return find_end_pipe(line, eof_line_num, pattern)
 
-        # find pattern
-        import re
-        re_pipe = re.compile("(%<?>%)")
 
-        # search for closest section top and bottom
-        initial_selection = s[0]
-
-        # if something is selected, send that, not the line
+        # SEND SELECTION: if something is selected, send that, not the line
         if s[0].a != s[0].b:
             chunk_range = sublime.Region(s[0].a, s[0].b)
-            print("SEND CHUNK:\n%s" % self.view.substr(chunk_range))
+            print("SEND SELECTION:\n%s" % self.view.substr(chunk_range))
             # Run command from Enhanced-R
             v.run_command('send_text_plus')
             return
 
+        # DEFINE PIPE PATTERN
+        import re
+        re_pipe = re.compile("(%<?>%)")
+
+        # DEFINE VARIABLES
+        initial_selection = s[0]
         first_point = v.line(s[0]).a
         current_line_num = v.rowcol(first_point)[0] # get line number
+        next_line_num = current_line_num + 1
         print('TOP LINE: %s' % current_line_num)
         eof = v.size()
         eof_line_num = v.rowcol(eof)[0]
+
+        # LOOK AHEAD FOR '<-' or '->': if next line has an assignment, then send current line
+        re_assign = re.compile("(<-)|(->)")
+        next_text = get_text(next_line_num, 0)
+
+        if re_assign.search(next_text):
+            # Add selection
+            line_text = v.line(v.text_point(current_line_num, 0))
+            print("SEND LINE:\n%s" % v.substr(sublime.Region(line_text.a, line_text.b)))
+            s.clear()
+            s.add(line_text)
+            # Run command from Enhanced-R
+            v.run_command('send_text_plus')
+            s.subtract(line_text)
+            self.move_cursor(current_line_num + 1)
+            return
+
+        # FIND TOP/BOTTOM LINES OF PIPE SEQUENCE
         top_pipe_line = find_pipe(current_line_num, re_pipe)
         bottom_pipe_line = find_end_pipe(current_line_num, eof_line_num, re_pipe)
 
@@ -95,11 +114,14 @@ class SendMagrittrPipe(sublime_plugin.TextCommand):
         if top_pipe_line is None:
             # Add selection
             line_text = v.line(v.text_point(current_line_num, 0))
+            print("SEND LINE:\n%s" % v.substr(sublime.Region(line_text.a, line_text.b)))
+            s.clear()
             s.add(line_text)
             # Run command from Enhanced-R
             v.run_command('send_text_plus')
             s.subtract(line_text)
             self.move_cursor(current_line_num + 1)
+            return
         else:
             bottom_pipe_line_num = v.rowcol(bottom_pipe_line.a)[0] # get line number
             chunk_range = sublime.Region(top_pipe_line.a, bottom_pipe_line.b)
@@ -118,3 +140,4 @@ class SendMagrittrPipe(sublime_plugin.TextCommand):
             #move cursor
             # print("RETURN BOTTOM LINE + 1: %d" % (bottom_pipe_line_num + 1))
             self.move_cursor(bottom_pipe_line_num + 1)
+            return
