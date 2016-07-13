@@ -59,9 +59,16 @@ class SendMagrittrPipe(sublime_plugin.TextCommand):
                     print("END PAREN (FOUND PIPE). LINE NUM %s" % line)
                     return find_end_pipe(line, eof_line_num, pattern)
                 else:
-                    bottom = v.line(v.text_point(line, 0))
-                    return bottom
+                    # check for empty space or parentheses. if found, then jump back
+                    text = get_text(line, 0)
+                    check = re.compile("^[ ]*\}*\)*\}*\)*\}*\)*[ ]*$")
 
+                    if check.search(text):
+                        bottom = v.line(v.text_point(line - 1, 0)) # jump back if find just parentheses
+                    else:
+                        bottom = v.line(v.text_point(line, 0)) # stay in current line
+
+                    return bottom
             elif line == eof_line_num:
                 bottom = v.line(v.text_point(eof_line_num, 0))
                 return bottom
@@ -90,11 +97,15 @@ class SendMagrittrPipe(sublime_plugin.TextCommand):
         eof = v.size()
         eof_line_num = v.rowcol(eof)[0]
 
+        # FIND TOP/BOTTOM LINES OF PIPE SEQUENCE
+        top_pipe_line = find_pipe(current_line_num, re_pipe)
+        bottom_pipe_line = find_end_pipe(current_line_num, eof_line_num, re_pipe)
+
         # LOOK AHEAD FOR '<-' or '->': if next line has an assignment, then send current line
         re_assign = re.compile("(<-)|(->)")
         next_text = get_text(next_line_num, 0)
 
-        if re_assign.search(next_text):
+        if (re_assign.search(next_text)):
             # Add selection
             line_text = v.line(v.text_point(current_line_num, 0))
             print("SEND LINE:\n%s" % v.substr(sublime.Region(line_text.a, line_text.b)))
@@ -105,10 +116,8 @@ class SendMagrittrPipe(sublime_plugin.TextCommand):
             s.subtract(line_text)
             self.move_cursor(current_line_num + 1)
             return
-
-        # FIND TOP/BOTTOM LINES OF PIPE SEQUENCE
-        top_pipe_line = find_pipe(current_line_num, re_pipe)
-        bottom_pipe_line = find_end_pipe(current_line_num, eof_line_num, re_pipe)
+        else:
+            pass
 
         # check if top_pipe_line is empty. If so, run send_text_plus on line.
         if top_pipe_line is None:
