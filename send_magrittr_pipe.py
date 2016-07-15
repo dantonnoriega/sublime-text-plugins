@@ -20,8 +20,13 @@ class SendMagrittrPipe(sublime_plugin.TextCommand):
 
         def in_paren(line):
             text = get_text(line, 0)
-            open_paren = re.compile("\([ ]*$|\([ ]+#+.*$")
-            return open_paren.search(text)
+            left_paren = re.compile("\(")
+            right_paren = re.compile("\)")
+            # count left and right parens
+            left_n = len(left_paren.findall(text))
+            right_n = len(right_paren.findall(text))
+            closed = (left_n == right_n) # check if line has all paren closed
+            return not closed
 
         def next_pipe(line, pattern):
             text = get_text(line, 0)
